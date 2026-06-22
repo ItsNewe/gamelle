@@ -1,3 +1,3 @@
-# allow crawling everything by default
+# deny crawling everything
 User-agent: *
-Disallow:
+Disallow: /
