@@ -1,0 +1,9 @@
+services:
+  gamelle:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - TRAEFIK_API_URL=${TRAEFIK_API_URL:-}
+      - TRAEFIK_DISCOVER_CANDIDATES=${TRAEFIK_DISCOVER_CANDIDATES:-}
