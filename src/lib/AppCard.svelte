@@ -1,10 +1,48 @@
 <script lang="ts">
 	import type { DiscoveredApp } from '$lib/types';
+	import { getCachedFavicon, setCachedFavicon } from '$lib/favicon-cache';
 
 	let { app }: { app: DiscoveredApp } = $props();
 
-	let faviconError = $state(false);
+	// Read the cache once. Cards are keyed by host, so app is stable for this component's
+	// lifetime; the closure keeps svelte-check from flagging a one-time reactive read.
+	// undefined = unknown, string = resolved URL, null = known to have no favicon.
+	const cached = (() => getCachedFavicon(app.host))();
+
+	let override = $state<string | null>(typeof cached === 'string' ? cached : null);
+	let triedLink = $state(false);
+	let faviconError = $state(cached === null);
+	const src = $derived(override ?? `${app.url}/favicon.ico`);
 	const letter = $derived((app.name[0] ?? '?').toUpperCase());
+
+	// Cache whichever URL actually rendered so later loads skip the probe.
+	function handleLoad() {
+		setCachedFavicon(app.host, src);
+	}
+
+	// On load failure: try the app's <link rel="icon"> once, then fall back to a letter.
+	async function handleError() {
+		if (triedLink) {
+			faviconError = true;
+			setCachedFavicon(app.host, null);
+			return;
+		}
+		triedLink = true;
+		try {
+			const res = await fetch(`/api/favicon?host=${encodeURIComponent(app.host)}`);
+			if (res.ok) {
+				const { href } = await res.json();
+				if (href) {
+					override = href;
+					return;
+				}
+			}
+		} catch {
+			// ignore and fall through to the letter avatar
+		}
+		faviconError = true;
+		setCachedFavicon(app.host, null);
+	}
 </script>
 
 <a
@@ -23,10 +61,11 @@
 				</span>
 			{:else}
 				<img
-					src={`${app.url}/favicon.ico`}
+					{src}
 					alt=""
 					class="h-5 w-5 shrink-0 rounded"
-					onerror={() => (faviconError = true)}
+					onload={handleLoad}
+					onerror={handleError}
 				/>
 			{/if}
 			<span class="truncate font-semibold capitalize">{app.name}</span>
